@@ -18,6 +18,7 @@ class WebhookController extends Controller
      */
     public function index()
     {
+        // try
         App::setLocale('en');
 
         print_r($this->bot('sendMessage', [
