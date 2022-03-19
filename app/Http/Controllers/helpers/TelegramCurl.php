@@ -4,9 +4,10 @@ namespace App\Http\Controllers\helpers;
 
 trait TelegramCurl
 {
+    public $ADMIN_ID = "929987374";
     public $BOT_TOKEN = "1966900043:AAHsP42pky6Rwv6FMmMAdS17IvAoxDU0f8M";
     public $BOT_USERNAME = "@DoveRobot";
-    public $ADMIN_ID = "929987374";
+
 
     function bot($method, $datas = [])
     {
