@@ -7,7 +7,7 @@ use App\Models\Robots;
 
 class StatusController extends Controller
 {
-    public function check()
+    public function statu()
     {
         $robots = Robots::where('status', 1)->orWhere('status',2)->get();
         foreach ($robots as $robot){
@@ -37,6 +37,9 @@ class StatusController extends Controller
             if($response->status == false && $robot->status == 2){
                 $robot->status = Robots::SPAMMED_ROBOT;
             }
+
+            $robot->last_response = json_encode($response);
+            $robot->save();
         }
     }
 

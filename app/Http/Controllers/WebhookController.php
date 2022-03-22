@@ -4,28 +4,31 @@ namespace App\Http\Controllers;
 
 use App\Http\Controllers\helpers\Keyboards;
 use App\Http\Controllers\helpers\TelegramCurl;
+use App\Http\Controllers\helpers\Validators;
 use App\Models\Messages;
 use App\Models\Profiles;
-use Illuminate\Http\Request;
 use Illuminate\Support\Facades\App;
-use Illuminate\Support\Facades\Config;
-use Illuminate\Support\Facades\Lang;
+
 
 class WebhookController extends Controller
 {
     use TelegramCurl;
     use Keyboards;
+    use Validators;
     /**
      * Display a listing of the resource.
      *
      * @return \Illuminate\Http\Response
      */
-    public $user;
+    public $user = null;
 
     public function index()
     {
         $this->user = Profiles::where('tg_id', $this->chat_id)->first();
-        App::setLocale($this->user ? $this->user->language : 'uz');
+
+        if($this->user == null && $this->text != "/start"){
+            return false;
+        }
 
         ////////////////////////////////////////////
         ///                                      ///
@@ -46,15 +49,16 @@ class WebhookController extends Controller
             }
 
             $this->bot('sendMessage', [
-                'text' => "Welcome to DoveRobot. Please choose your language.\n\n
-                           Добро пожаловать в DoveRobot. Пожалуйста, выберите свой язык.\n\n
-                           DoveRobot ga xush kelibsiz.Kerakli tilni tanlang:",
+                'text' => "DoveRobot ga xush kelibsiz.\nKerakli tilni tanlang.\n\n"
+                          ."Добро пожаловать в DoveRobot.\nПожалуйста, выберите свой язык.\n\n"
+                          ."Welcome to DoveRobot.\nPlease choose your language.",
                 'chat_id' => $this->chat_id,
                 'reply_markup' => $this->keyboardLanguages(),
+                'parse_mode'   => 'HTML'
             ]);
         }
 
-
+        App::setLocale($this->user ? $this->user->language : 'uz');
 
         ////////////////////////////////////////////
         ///                                      ///
@@ -71,9 +75,11 @@ class WebhookController extends Controller
                 $this->bot('sendMessage', [
                     'text' => trans('messages.language') . " " . trans('messages.language successfully set'),
                     'chat_id' => $this->chat_id,
-                    'reply_markup' => $this->keyboardPolicyContact()
+                    'reply_markup' => $this->keyboardPolicyContact(),
+                    'parse_mode'   => 'HTML'
                 ]);
             }
+            exit;
         }
 
 
@@ -91,6 +97,7 @@ class WebhookController extends Controller
                     'reply_markup' => $this->keyboardContact()
                 ]);
             }
+            exit;
         }
 
 
@@ -99,82 +106,151 @@ class WebhookController extends Controller
         ///    4. User contact number shared     ///
         ///                                      ///
         /// ////////////////////////////////////////
-        if(isset($contact)){
-            $this->user->phone_number = str_replace("+","", $contact);
+        if(isset($this->contact)){
+            $this->user->phone_number = str_replace("+","", $this->contact);
             $this->user->state = 'CONTACT_SHARED';
-
-            if($this->user->save()){
-               $this->bot('sendMessage', [
-                   'text' => trans('messages.Phone number or username request with examples'),
-                   'chat_id' => $this->chat_id
-               ]);
-           }
-            exit;
+            $this->user->save();
         }
 
+        if($this->text == trans('messages.Send new message')){
+            $this->user->state = 'NEW_MESSAGE';
+            $this->user->save();
+        }
+
+        if($this->user->state == "CONTACT_SHARED" || $this->user->state == "NEW_MESSAGE"){
+            $this->user->state = 'NEW_MESSAGE_TEXT';
+            $this->user->save();
+
+            $this->bot('sendMessage', [
+                'text' => trans('messages.Phone number or username request with examples'),
+                'chat_id' => $this->chat_id,
+                'parse_mode'   => 'HTML',
+                'reply_markup' => $this->keyboardRemoveButtons()
+            ]);
+            exit;
+        }
 
         ////////////////////////////////////////////////
         ///                                          ///
         ///    5. Receiver username/number received  ///
         ///                                          ///
         /// ////////////////////////////////////////////
-        if($this->user->state == "CONTACT_SHARED" || $this->user->state == "WRITE_MESSAGE"){
-            if( (preg_match("/^[0-9]+$/", $this->text) === 1 && strlen($this->text) === 12) ||
-                (strpos($this->text,"@") === 0 && strlen($this->text) > 4)
-            ) {
+
+        if($this->user->state == "NEW_MESSAGE_TEXT"){
+
+            if($this->validatePhoneNumber($this->text) || $this->validateUsername($this->text)){
+
                 $message = new Messages();
                 $message->profile_id = $this->user->id;
                 $message->receiver = $this->text;
-                $message->status = 0;
-                $message->save();
+                $message->status = Messages::WAITING_MESSAGE;
 
-                $this->user->state = 'RECEIVER_ACCEPTED';
+                if($message->save()){
+                    $this->user->message_id = $message->id;
+                    $this->user->state = 'RECEIVER_ACCEPTED';
 
-                if ($this->user->save()) {
-                    $this->bot('sendMessage', [
-                        'text' => trans('messages.Now send me the message text which I have to deliver'),
-                        'chat_id' => $this->chat_id
-                    ]);
+                    if ($this->user->save()) {
+                        $this->bot('sendMessage', [
+                            'text' => trans('messages.Now send me the message text which I have to deliver'),
+                            'chat_id' => $this->chat_id,
+                            'parse_mode'   => 'HTML'
+                        ]);
+                    }
                 }
-            } exit;
+            } else {
+                $this->bot('sendMessage', [
+                    'text' => trans('messages.Wrong username or phone number'),
+                    'chat_id' => $this->chat_id,
+                    'parse_mode'   => 'HTML'
+                ]);
+            }
+            exit;
         }
+
 
         ////////////////////////////////////////////////
         ///                                          ///
-        ///    6. Bind message to sender ID in DB    ///
+        ///    6. Delivering message to receiver     ///
         ///                                          ///
         /// ////////////////////////////////////////////
         if($this->user->state == "RECEIVER_ACCEPTED"){
-            $message = Messages::where('profile_id', $this->user->id)->where('status',0)->first();
+            $message = Messages::where('id', $this->user->message_id)->first();
             $message->message = $this->text;
-            $message->save();
 
             $this->user->state = "WRITE_MESSAGE";
-
             if ($this->user->save()) {
-                $this->bot('sendMessage', [
+                $loader = $this->bot('sendMessage', [
                     'text' => trans('messages.Sending your message'),
-                    'chat_id' => $this->chat_id
+                    'chat_id' => $this->chat_id,
+                    'parse_mode'   => 'HTML'
                 ]);
+
+                if($loader->ok === true){
+
+                    $filed = "number";
+                    $receiver = $message->receiver;
+
+                    if(is_numeric($message->receiver)){
+
+                        $contact = Messages::where('receiver', $receiver)
+                            ->whereNotNull('receiver_telegram_id')
+                            ->first();
+
+                        if($contact){
+                            $receiver = $contact->receiver_telegram_id;
+                            $filed = "username";
+                        }
+                    } else {
+                        $filed = "username";
+                    }
+
+                    $robotResponse = RobotsController::sendMessage($receiver, $message->message, $this->user->phone_number,  $filed, $message);
+
+                    if($robotResponse['response']->status){
+                        $message->receiver_telegram_id = $robotResponse['response']->user_id;
+                        $message->status = Messages::DELIVERED_MESSAGE;
+                        $status_text = trans('messages.Your message delivered');
+                    } else {
+                        $message->status = Messages::FAILED_MESSAGE;
+                        $status_text = trans('messages.This user has restricted unknown contacts');
+                    }
+
+                    $message->robot_id = $robotResponse['robot_id'];
+                    $message->save();
+
+                    $this->bot('deleteMessage', [
+                        'chat_id' => $this->chat_id,
+                        'message_id'   => $loader->result->message_id
+                    ]);
+
+                    $this->bot('sendMessage', [
+                        'text' => $status_text,
+                        'chat_id' => $this->chat_id,
+                        'parse_mode'   => 'HTML',
+                        'reply_markup'   => $this->keyboardNewMessage()
+                    ]);
+                }
             }
         }
 
 
 
 
-        print_r($this->bot('sendMessage', [
-         'text' => trans('messages.language')." ".trans('messages.language successfully set'),
-         'chat_id' => '1993158340'
-        ]));
+
     }
 
 
     public function test()
     {
-        $message = Messages::where('profile_id', 74)->where('status',1)->first();
-        $message->message = "CCCCC55";
-        $message->save();
-        print_r($message);exit;
+//        print_r($this->bot('sendMessage', [
+//            'text' => trans('messages.language')." ".trans('messages.language successfully set'),
+//            'chat_id' => '1993158340'
+//        ]));
+//
+//        $message = Messages::where('profile_id', 74)->where('status',1)->first();
+//        $message->message = "CCCCC55";
+//        $message->save();
+//        print_r($message);exit;
 
 //        $model = new Profiles();
 //        $model->tg_id = '222222';

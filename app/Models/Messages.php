@@ -4,20 +4,21 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Carbon;
 
 /**
  * App\Models\Messages
  *
- * @method static where(string $string, $chat_id)
  * @property mixed|string $message
- * @property mixed|string $created_date
+ * @property Carbon|null $created_at
+ * @property Carbon|null $updated_at
  * @property mixed|string $receiver
- * @property mixed|string $description
+ * @property mixed|string $receiver_telegram_id
  * @property int|mixed $profile_id
  * @property int|mixed $status
  * @property int $id
- * @property \Illuminate\Support\Carbon|null $updated_date
  * @property int|null $robot_id
+ *
  * @method static \Illuminate\Database\Eloquent\Builder|Messages newModelQuery()
  * @method static \Illuminate\Database\Eloquent\Builder|Messages newQuery()
  * @method static \Illuminate\Database\Eloquent\Builder|Messages query()
@@ -37,8 +38,9 @@ class Messages extends Model
     use HasFactory;
     public $timestamps = true;
 
-    const CREATED_AT = 'created_date';
-    const UPDATED_AT = 'updated_date';
+    public const WAITING_MESSAGE = 0;
+    public const DELIVERED_MESSAGE = 1;
+    public const FAILED_MESSAGE = 2;
     /**
      * The table associated with the model.
      *

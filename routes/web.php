@@ -13,7 +13,9 @@ use Illuminate\Support\Facades\Route;
 |
 */
 
-Route::get('/', [\App\Http\Controllers\WebhookController::class, 'test']);
-Route::get('/status', [\App\Http\Controllers\StatusController::class, 'check']);
+Route::any('/', [\App\Http\Controllers\WebhookController::class, 'index']);
+Route::get('/status', [\App\Http\Controllers\StatusController::class, 'status']);
 
-Route::post('/telegram/{bot}', 'WebhookController@store');
+Route::get('/test', [\App\Http\Controllers\WebhookController::class, 'test']);
+
+//Route::post('/telegram/{bot}', 'WebhookController@store');

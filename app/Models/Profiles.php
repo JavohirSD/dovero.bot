@@ -8,7 +8,6 @@ use Illuminate\Database\Eloquent\Model;
 /**
  * App\Models\Profiles
  *
- * @method static where(string $string, $chat_id)
  * @property mixed|string $tg_id
  * @property mixed|string $last_name
  * @property mixed|string $first_name
@@ -58,9 +57,4 @@ class Profiles extends Model
      */
     protected $table = 'profiles';
 
-    /**
-     * The model's default values for attributes.
-     *
-     * @var array
-     */
 }
